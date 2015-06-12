@@ -1,17 +1,11 @@
 import logging 
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import csv
 from gensim import corpora, models, similarities, matutils
-from scipy import stats
 from sklearn.cluster import AgglomerativeClustering
-from sklearn import metrics
-from sklearn.pipeline import Pipeline
 from math import log
 from nltk.corpus import stopwords
 from sklearn.metrics import silhouette_samples, silhouette_score
-from sklearn.metrics import jaccard_similarity_score
 
 import matplotlib.pyplot as plt
 
@@ -86,7 +80,7 @@ def calculateNumberOfIdealClusters(maxAmount, corpus):
     return silhouette_high_n_clusters
 
 
-def calculate_amount_of_clusters_for_each_job_id(clusterLabels, jobIds):
+def calculateAmountOfClustersForEachJobId(clusterLabels, jobIds):
     dictionaryWithClustersForEachJobId = {}
 
     for index, value in enumerate(clusterLabels):
@@ -106,6 +100,16 @@ def calculate_amount_of_clusters_for_each_job_id(clusterLabels, jobIds):
 
     return dictionaryWithClustersForEachJobId
 
+def calculateJaccard(firstJobSentencesPerCluster, secondJobSentencesPerCluster):
+    countIntersectionNumberOfClusters = 0
+    for index, elt in enumerate(firstJobSentencesPerCluster):
+        if secondJobSentencesPerCluster[index] != 0 and elt != 0:
+            countIntersectionNumberOfClusters += 1
+
+    amountOfUniqueClustersPresent = max(len(filter(lambda a: a != 0, firstJobSentencesPerCluster)), len(filter(lambda a: a != 0, secondJobSentencesPerCluster)))
+
+    return (float(countIntersectionNumberOfClusters) / float(amountOfUniqueClustersPresent))
+
 def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, clusterLabels):
     jobCombinationAndCoefficients = []
     index = 0;
@@ -117,6 +121,7 @@ def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, 
             otherJobDict = clustersForEachjobSentence[eachOtherJobId]
             currentJobDict = clustersForEachjobSentence[jobId]
 
+            # add clusters that do not have sentences for that job id in them
             for key in set(clusterLabels):
                 if key not in currentJobDict:
                     currentJobDict[key] = 0
@@ -124,11 +129,12 @@ def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, 
                 if key not in otherJobDict:
                     otherJobDict[key] = 0
 
-            coefficient = jaccard_similarity_score(currentJobDict.values(), otherJobDict.values())
+            coefficient = calculateJaccard(currentJobDict.values(), otherJobDict.values())
+
             jobCombinationAndCoefficients.append({"job_id_first": jobId, "job_id_second": eachOtherJobId, "jaccard_similarity_score": coefficient})
 
             if (coefficient >= 0.00):
-                print "Job with ids %s and %s are %f similar %s %s" % (jobId, eachOtherJobId, coefficient, currentJobDict, otherJobDict)
+                print "Job with ids %s and %s are %f similar %s %s" % (jobId, eachOtherJobId, coefficient, currentJobDict.values(), otherJobDict.values())
 
         index += 1
 
@@ -173,7 +179,7 @@ numClusters = calculateNumberOfIdealClusters(len(set(jobIds)), corpusAsMatrix)
 cluster = AgglomerativeClustering(n_clusters=numClusters, linkage="ward", affinity="euclidean")
 clusterLabels = cluster.fit_predict(corpusAsMatrix)
 
-clustersForEachjobSentence = calculate_amount_of_clusters_for_each_job_id(clusterLabels, jobIds)
+clustersForEachjobSentence = calculateAmountOfClustersForEachJobId(clusterLabels, jobIds)
 
 jobCombinationAndCoefficients = calculateJaccardScoreForEachJobCombo(jobIds, clustersForEachjobSentence, clusterLabels)
 
