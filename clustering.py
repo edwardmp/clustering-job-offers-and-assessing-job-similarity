@@ -18,19 +18,33 @@ def loadStopWords():
     return stopWords
 
 def openInputDataFileAndReturnSentencesRows(fileName='input/data.csv'):
-    f = open(fileName)
-    csv_f = csv.reader(f)
+    file = open(fileName)
+    csvFileReader = csv.reader(file)
+
+    # skip column header
+    next(csvFileReader, None)
 
     jobs = []
     jobIds = []
     index = 0
-    for line in csv_f:
-        # skip column header
-        if line[1] != "sentence" or line[0] != "job_id":
-            jobIds.append(line[0])
-            jobs.append(line[1])
+    for line in csvFileReader:
+        jobIds.append(line[0])
+        jobs.append(line[1])
 
     return (jobs, jobIds)
+
+def openInputDataFileContainingJobTitlesForJobIdsAndReturnDictionary(fileName='input/jobTitlesForJobIds.csv'):
+    file = open(fileName)
+    csvFileReader = csv.reader(file)
+
+    # skip column header
+    next(csvFileReader, None)
+
+    dictionaryContainingJobTitleForJobIdKey = {}
+    for line in csvFileReader:
+		dictionaryContainingJobTitleForJobIdKey[line[0]] = line[1]
+
+    return dictionaryContainingJobTitleForJobIdKey
 
 def writeClustersForEachJobIdToOutputFile(clusterLabels, allJobIds, sentenceList, fileName="output/outputClusterForJobId.csv"):
     with open(fileName, "w") as file:
@@ -46,39 +60,39 @@ def writeClustersForEachJobIdToOutputFile(clusterLabels, allJobIds, sentenceList
 def writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients, fileName="output/outputInfoForJobIdCombo.csv"):
     with open(fileName, "w+") as file:
         writer = csv.writer(file, delimiter=",")
-        writer.writerow(["JobId_First", "JobId_Second", "Jaccard_Similarity_First_Method_Score", "Jaccard_Similarity_Second_Method_Score", "Jaccard_Similarity_Difference"])
+        writer.writerow(["Job_Id_First", "Job_Id_Second", "Jaccard_Similarity_First_Method_Score", "Jaccard_Similarity_Second_Method_Score", "Jaccard_Similarity_Difference", "Job_Title_First", "Job_Title_Second"])
 
         for job in jobCombinationAndCoefficients:
-            writer.writerow([job["job_id_first"], job["job_id_second"], job["jaccard_similarity_first_method_score"], job["jaccard_similarity_second_method_score"], job["jaccard_similarity_difference"]])
+            writer.writerow([job["job_id_first"], job["job_id_second"], job["jaccard_similarity_first_method_score"], job["jaccard_similarity_second_method_score"], job["jaccard_similarity_difference"], job["job_title_first"], job["job_title_second"]])
 
 def calculateNumberOfIdealClusters(maxAmount, corpus):
-    range_n_clusters = range(2, maxAmount) # max amount of clusters equal to amount of jobs
+	print "Initializing silhouette analysis"
+	range_n_clusters = range(2, maxAmount) # max amount of clusters equal to amount of jobs
 
-    silhouette_high = 0;
-    silhouette_high_n_clusters = 2;
+	silhouette_high = 0;
+	silhouette_high_n_clusters = 2;
 
-    for n_clusters in range_n_clusters:
-        # Initialize the clusterer with n_clusters value
-        cluster = AgglomerativeClustering(n_clusters=n_clusters, linkage="ward", affinity="euclidean")
-        cluster_labels = cluster.fit_predict(corpus)
+	for n_clusters in range_n_clusters:
+		# Initialize the clusterer with n_clusters value
+		cluster = AgglomerativeClustering(n_clusters=n_clusters, linkage="ward", affinity="euclidean")
+		cluster_labels = cluster.fit_predict(corpus)
 
-        # The silhouette_score gives the average value for all the samples.
-        # This gives a perspective into the density and separation of the formed
-        # clusters
-        silhouette_avg = silhouette_score(corpus, cluster_labels)
+		# The silhouette_score gives the average value for all the samples.
+		# This gives a perspective into the density and separation of the formed
+		# clusters
+		silhouette_avg = silhouette_score(corpus, cluster_labels)
 
-        print("For n_clusters =", n_clusters, "The average silhouette_score is :", silhouette_avg)
+		print "For n_clusters = %d, the average silhouette_score is: %.5f" % (n_clusters, silhouette_avg)
 
-        if (silhouette_avg > silhouette_high):
-            silhouette_high = silhouette_avg
-            silhouette_high_n_clusters = n_clusters
+		if (silhouette_avg > silhouette_high):
+		    silhouette_high = silhouette_avg
+		    silhouette_high_n_clusters = n_clusters
 
-        # Compute the silhouette scores for each sample
-        sample_silhouette_values = silhouette_samples(corpus, cluster_labels)
+		# Compute the silhouette scores for each sample
+		sample_silhouette_values = silhouette_samples(corpus, cluster_labels)
 
-    print ("Highest score = %f for n_clusters = %d" % (silhouette_high, silhouette_high_n_clusters))
-    return silhouette_high_n_clusters
-
+	print ("Highest score = %f for n_clusters = %d" % (silhouette_high, silhouette_high_n_clusters))
+	return silhouette_high_n_clusters
 
 def calculateAmountOfClustersForEachJobId(clusterLabels, jobIds):
     dictionaryWithClustersForEachJobId = {}
@@ -122,7 +136,7 @@ def calculateJaccardSecondMethod(currentJobDict, otherJobDict):
 
     return coefficient
 
-def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, clusterLabels):
+def calculateJaccardScoresForEachJobCombo(allJobIds, clustersForEachjobSentence, clusterLabels, jobTitlesForJobIds):
     jobCombinationAndCoefficients = []
     index = 0;
     for jobId in list(set(jobIds)):
@@ -144,10 +158,14 @@ def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, 
             coefficientFirstJaccardLikeMethod = round(calculateJaccardFirstMethod(currentJobDict.values(), otherJobDict.values()), 3)
             coefficientSecondJaccardLikeMethod = round(calculateJaccardSecondMethod(currentJobDict, otherJobDict), 3)
             coefficientDifference = round((max(coefficientSecondJaccardLikeMethod, coefficientFirstJaccardLikeMethod) - min(coefficientFirstJaccardLikeMethod, coefficientSecondJaccardLikeMethod)), 3)
+            jobTitleFirst = jobTitlesForJobIds[jobId]
+            jobTitleSecond = jobTitlesForJobIds[eachOtherJobId]
 
-            jobCombinationAndCoefficients.append({"job_id_first": jobId, "job_id_second": eachOtherJobId, "jaccard_similarity_first_method_score": coefficientFirstJaccardLikeMethod, "jaccard_similarity_second_method_score": coefficientSecondJaccardLikeMethod, "jaccard_similarity_difference": coefficientDifference})
-            print "First job (key = cluster identier, value = amount of sentences in cluster): %s" % currentJobDict
-            print "Second job (key = cluster identier, value = amount of sentences in cluster): %s" % otherJobDict
+            # create output file containg all below data, for reference
+            jobCombinationAndCoefficients.append({"job_id_first": jobId, "job_id_second": eachOtherJobId, "jaccard_similarity_first_method_score": coefficientFirstJaccardLikeMethod, "jaccard_similarity_second_method_score": coefficientSecondJaccardLikeMethod, "jaccard_similarity_difference": coefficientDifference, "job_title_first": jobTitleFirst, "job_title_second": jobTitleSecond})
+
+            print "First job with title %s (key = cluster identier, value = amount of sentences in cluster): %s" % (jobTitleFirst, currentJobDict)
+            print "Second job with title %s (key = cluster identier, value = amount of sentences in cluster): %s" % (jobTitleSecond, otherJobDict)
             print "Job with ids %s and %s are (first method) %.3f similar and (second method) %.3f similar" % (jobId, eachOtherJobId, coefficientFirstJaccardLikeMethod, coefficientSecondJaccardLikeMethod)
 
             if (coefficientDifference >= float(0.500)):
@@ -159,52 +177,6 @@ def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, 
         index += 1
 
     return jobCombinationAndCoefficients
-
-sentenceList, jobIds = openInputDataFileAndReturnSentencesRows()
-
-# Automatically detect common phrases, bigram words are underscored in between them (frequently co-occurring tokens)
-bigram = models.Phrases([line.lower().split() for line in sentenceList])
-
-# Load a list of stopwords
-stopWords = loadStopWords()
-
-# convert tokens to vector
-bigramAsDictionary = corpora.Dictionary(bigram[[line.split() for line in sentenceList]])
-
-# convert stopwords to id
-stopWordIds = [bigramAsDictionary.token2id[stopword] for stopword in stopWords
-          if stopword in bigramAsDictionary.token2id]
-
-# remove stopwords
-bigramAsDictionary.filter_tokens(stopWordIds)
-bigramAsDictionary.compactify()
-
-# convert to (word_id, word_frequency) tuples
-bagOfWords = [bigramAsDictionary.doc2bow(bigram[line.split()]) for line in sentenceList]
-
-# convert matrix to term frequencies matrix
-tfidf = models.TfidfModel(bagOfWords)
-corpusTfidf = tfidf[bagOfWords]
-
-# use LSA analysis on corpus
-lsi = models.LsiModel(corpusTfidf, id2word=bigramAsDictionary, num_topics=30)
-corpusLsi = lsi[corpusTfidf]
-
-# convert corpus to array
-corpusAsMatrix = matutils.corpus2dense(corpusLsi, num_terms=30).transpose()
-
-# calculate ideal number of clusters based on silhouette analysis
-numClusters = 3 #calculateNumberOfIdealClusters(len(set(jobIds)), corpusAsMatrix)
-
-cluster = AgglomerativeClustering(n_clusters=numClusters, linkage="ward", affinity="euclidean")
-clusterLabels = cluster.fit_predict(corpusAsMatrix)
-
-clustersForEachjobSentence = calculateAmountOfClustersForEachJobId(clusterLabels, jobIds)
-
-jobCombinationAndCoefficients = calculateJaccardScoreForEachJobCombo(jobIds, clustersForEachjobSentence, clusterLabels)
-
-writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients)
-writeClustersForEachJobIdToOutputFile(clusterLabels, jobIds, sentenceList)
 
 # some unit tests to confirm both Jaccard scores are calculated correctly
 def testIfFirstJaccardLikeSimilarityCalculationIsDoneCorrectly():
@@ -245,3 +217,51 @@ def testIfSecondJaccardLikeSimilarityCalculationIsDoneCorrectly():
 
 testIfFirstJaccardLikeSimilarityCalculationIsDoneCorrectly()
 testIfSecondJaccardLikeSimilarityCalculationIsDoneCorrectly()
+
+sentenceList, jobIds = openInputDataFileAndReturnSentencesRows()
+
+jobTitlesForJobIds = openInputDataFileContainingJobTitlesForJobIdsAndReturnDictionary()
+
+# Automatically detect common phrases, bigram words are underscored in between them (frequently co-occurring tokens)
+bigram = models.Phrases([line.lower().split() for line in sentenceList])
+
+# Load a list of stopwords
+stopWords = loadStopWords()
+
+# convert tokens to vector
+bigramAsDictionary = corpora.Dictionary(bigram[[line.split() for line in sentenceList]])
+
+# convert stopwords to id
+stopWordIds = [bigramAsDictionary.token2id[stopword] for stopword in stopWords
+          if stopword in bigramAsDictionary.token2id]
+
+# remove stopwords
+bigramAsDictionary.filter_tokens(stopWordIds)
+bigramAsDictionary.compactify()
+
+# convert to (word_id, word_frequency) tuples
+bagOfWords = [bigramAsDictionary.doc2bow(bigram[line.split()]) for line in sentenceList]
+
+# convert matrix to term frequencies matrix
+tfidf = models.TfidfModel(bagOfWords)
+corpusTfidf = tfidf[bagOfWords]
+
+# use LSA analysis on corpus
+lsi = models.LsiModel(corpusTfidf, id2word=bigramAsDictionary, num_topics=30)
+corpusLsi = lsi[corpusTfidf]
+
+# convert corpus to array
+corpusAsMatrix = matutils.corpus2dense(corpusLsi, num_terms=30).transpose()
+
+# calculate ideal number of clusters based on silhouette analysis
+numClusters = calculateNumberOfIdealClusters(len(set(jobIds)), corpusAsMatrix)
+
+cluster = AgglomerativeClustering(n_clusters=numClusters, linkage="ward", affinity="euclidean")
+clusterLabels = cluster.fit_predict(corpusAsMatrix)
+
+clustersForEachjobSentence = calculateAmountOfClustersForEachJobId(clusterLabels, jobIds)
+
+jobCombinationAndCoefficients = calculateJaccardScoresForEachJobCombo(jobIds, clustersForEachjobSentence, clusterLabels, jobTitlesForJobIds)
+
+writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients)
+writeClustersForEachJobIdToOutputFile(clusterLabels, jobIds, sentenceList)
