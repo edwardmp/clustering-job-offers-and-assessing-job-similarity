@@ -26,9 +26,9 @@ def openInputDataFileAndReturnSentencesRows(fileName='input/data.csv'):
     index = 0
     for line in csv_f:
         # skip column header
-		if line[1] != "sentence" or line[0] != "job_id":
-			jobIds.append(line[0])
-			jobs.append(line[1])
+        if line[1] != "sentence" or line[0] != "job_id":
+            jobIds.append(line[0])
+            jobs.append(line[1])
 
     return (jobs, jobIds)
 
@@ -174,7 +174,7 @@ corpusLsi = lsi[corpusTfidf]
 corpusAsMatrix = matutils.corpus2dense(corpusLsi, num_terms=30).transpose()
 
 # calculate ideal number of clusters based on silhouette analysis
-numClusters = calculateNumberOfIdealClusters(len(set(jobIds)), corpusAsMatrix)
+numClusters = 3 #calculateNumberOfIdealClusters(len(set(jobIds)), corpusAsMatrix)
 
 cluster = AgglomerativeClustering(n_clusters=numClusters, linkage="ward", affinity="euclidean")
 clusterLabels = cluster.fit_predict(corpusAsMatrix)
@@ -182,6 +182,6 @@ clusterLabels = cluster.fit_predict(corpusAsMatrix)
 clustersForEachjobSentence = calculateAmountOfClustersForEachJobId(clusterLabels, jobIds)
 
 jobCombinationAndCoefficients = calculateJaccardScoreForEachJobCombo(jobIds, clustersForEachjobSentence, clusterLabels)
-
+     
 writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients)
 writeClustersForEachJobIdToOutputFile(clusterLabels, jobIds, sentenceList)
