@@ -1,4 +1,4 @@
-import logging 
+import logging
 import numpy as np
 import csv
 from gensim import corpora, models, similarities, matutils
@@ -9,7 +9,7 @@ from sklearn.metrics import silhouette_samples, silhouette_score
 
 import matplotlib.pyplot as plt
 
-logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+#logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 def loadStopWords():
     stopWords = [line.rstrip('\n\r') for line in open('stop-words_dutch.txt')]
@@ -36,7 +36,7 @@ def writeClustersForEachJobIdToOutputFile(clusterLabels, allJobIds, sentenceList
     with open(fileName, "w") as file:
         writer = csv.writer(file, delimiter=",")
         writer.writerow(["JobId", "Cluster", "Sentence"])
-     
+
         count = 0
         for sentence in sentenceList:
             clusterNumber = clusterLabels[count]
@@ -46,11 +46,11 @@ def writeClustersForEachJobIdToOutputFile(clusterLabels, allJobIds, sentenceList
 def writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients, fileName="output/outputInfoForJobIdCombo.csv"):
     with open(fileName, "w+") as file:
         writer = csv.writer(file, delimiter=",")
-        writer.writerow(["JobId_First", "JobId_Second", "Jaccard_Similarity_Score"])
-     
+        writer.writerow(["JobId_First", "JobId_Second", "Jaccard_Similarity_First_Method_Score", "Jaccard_Similarity_Second_Method_Score", "Jaccard_Similarity_Difference"])
+
         for job in jobCombinationAndCoefficients:
-            writer.writerow([job["job_id_first"], job["job_id_second"], job["jaccard_similarity_score"]])
-            
+            writer.writerow([job["job_id_first"], job["job_id_second"], job["jaccard_similarity_first_method_score"], job["jaccard_similarity_second_method_score"], job["jaccard_similarity_difference"]])
+
 def calculateNumberOfIdealClusters(maxAmount, corpus):
     range_n_clusters = range(2, maxAmount) # max amount of clusters equal to amount of jobs
 
@@ -84,23 +84,23 @@ def calculateAmountOfClustersForEachJobId(clusterLabels, jobIds):
     dictionaryWithClustersForEachJobId = {}
 
     for index, value in enumerate(clusterLabels):
-         jobIdForSentence = jobIds[index]
+        jobIdForSentence = jobIds[index]
 
-         if jobIdForSentence not in dictionaryWithClustersForEachJobId:
+        if jobIdForSentence not in dictionaryWithClustersForEachJobId:
             dictionaryWithClustersForEachJobId[jobIdForSentence] = {}
 
-         jobIdDict = dictionaryWithClustersForEachJobId[jobIdForSentence]
+        jobIdDict = dictionaryWithClustersForEachJobId[jobIdForSentence]
 
-         if value not in jobIdDict:
+        if value not in jobIdDict:
             num = 0
-         else:
+        else:
             num = jobIdDict[value]
 
-         jobIdDict[value] = num + 1
+        jobIdDict[value] = num + 1
 
     return dictionaryWithClustersForEachJobId
 
-def calculateJaccard(firstJobSentencesPerCluster, secondJobSentencesPerCluster):
+def calculateJaccardFirstMethod(firstJobSentencesPerCluster, secondJobSentencesPerCluster):
     countIntersectionNumberOfClusters = 0
     for index, elt in enumerate(firstJobSentencesPerCluster):
         if secondJobSentencesPerCluster[index] != 0 and elt != 0:
@@ -109,6 +109,18 @@ def calculateJaccard(firstJobSentencesPerCluster, secondJobSentencesPerCluster):
     amountOfUniqueClustersPresent = max(len(filter(lambda a: a != 0, firstJobSentencesPerCluster)), len(filter(lambda a: a != 0, secondJobSentencesPerCluster)))
 
     return (float(countIntersectionNumberOfClusters) / float(amountOfUniqueClustersPresent))
+
+def calculateJaccardSecondMethod(currentJobDict, otherJobDict):
+    unionCount = 0
+    intersectionCount = 0
+
+    for key in currentJobDict.keys():
+        intersectionCount = intersectionCount + min(currentJobDict[key], otherJobDict[key])
+        unionCount = unionCount + max(currentJobDict[key], otherJobDict[key])
+
+    coefficient = float(intersectionCount) / float(unionCount)
+
+    return coefficient
 
 def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, clusterLabels):
     jobCombinationAndCoefficients = []
@@ -129,12 +141,20 @@ def calculateJaccardScoreForEachJobCombo(allJobIds, clustersForEachjobSentence, 
                 if key not in otherJobDict:
                     otherJobDict[key] = 0
 
-            coefficient = calculateJaccard(currentJobDict.values(), otherJobDict.values())
+            coefficientFirstJaccardLikeMethod = round(calculateJaccardFirstMethod(currentJobDict.values(), otherJobDict.values()), 3)
+            coefficientSecondJaccardLikeMethod = round(calculateJaccardSecondMethod(currentJobDict, otherJobDict), 3)
+            coefficientDifference = round((max(coefficientSecondJaccardLikeMethod, coefficientFirstJaccardLikeMethod) - min(coefficientFirstJaccardLikeMethod, coefficientSecondJaccardLikeMethod)), 3)
 
-            jobCombinationAndCoefficients.append({"job_id_first": jobId, "job_id_second": eachOtherJobId, "jaccard_similarity_score": coefficient})
+            jobCombinationAndCoefficients.append({"job_id_first": jobId, "job_id_second": eachOtherJobId, "jaccard_similarity_first_method_score": coefficientFirstJaccardLikeMethod, "jaccard_similarity_second_method_score": coefficientSecondJaccardLikeMethod, "jaccard_similarity_difference": coefficientDifference})
+            print "First job (key = cluster identier, value = amount of sentences in cluster): %s" % currentJobDict
+            print "Second job (key = cluster identier, value = amount of sentences in cluster): %s" % otherJobDict
+            print "Job with ids %s and %s are (first method) %.3f similar and (second method) %.3f similar" % (jobId, eachOtherJobId, coefficientFirstJaccardLikeMethod, coefficientSecondJaccardLikeMethod)
 
-            if (coefficient >= 0.00):
-                print "Job with ids %s and %s are %f similar %s %s" % (jobId, eachOtherJobId, coefficient, currentJobDict.values(), otherJobDict.values())
+            if (coefficientDifference >= float(0.500)):
+                print "Difference between both Jaccard scores is %.3f, more than 0.500 threshold" %  coefficientDifference
+
+            # Newline for clarity reasons. You're welcome.
+            print ""
 
         index += 1
 
@@ -182,6 +202,46 @@ clusterLabels = cluster.fit_predict(corpusAsMatrix)
 clustersForEachjobSentence = calculateAmountOfClustersForEachJobId(clusterLabels, jobIds)
 
 jobCombinationAndCoefficients = calculateJaccardScoreForEachJobCombo(jobIds, clustersForEachjobSentence, clusterLabels)
-     
+
 writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients)
 writeClustersForEachJobIdToOutputFile(clusterLabels, jobIds, sentenceList)
+
+# some unit tests to confirm both Jaccard scores are calculated correctly
+def testIfFirstJaccardLikeSimilarityCalculationIsDoneCorrectly():
+    # first vacancy has 7 sentences in 3 different clusters:
+    # 2 sentences in cluster 0, 4 sentences in cluster 1 and 1 sentence in cluster 2
+    firstVacancyNumberOfSentencesInEachClusterDictionary = {0: 2, 1: 4, 2: 1}
+
+    # second vacancy has 7 sentences in 3 different clusters:
+    # 1 sentence in cluster 0, 3 sentences in cluster 1 and 2 sentences in cluster 2
+    secondVacancyNumberOfSentencesInEachClusterDictionary = {0: 1, 1: 3, 2: 2}
+
+    # from manual calculation we know the Jaccard like score for this should be 5 divided by 8
+    coefficient = calculateJaccardFirstMethod(firstVacancyNumberOfSentencesInEachClusterDictionary.values(), secondVacancyNumberOfSentencesInEachClusterDictionary.values())
+
+    if coefficient != (float(3)/float(3)):
+        exceptionContent = 'Test that confirms calculation of first Jaccard type coefficient is done right has failed, result is not equal to 1 (which is %f) but is %f' % ((float(3)/float(3)), coefficient)
+        raise AssertionError(exceptionContent)
+    else:
+        print 'Successfully confirmed that first Jaccard like similarity is calculated correctly!'
+
+def testIfSecondJaccardLikeSimilarityCalculationIsDoneCorrectly():
+    # first vacancy has 7 sentences in 3 different clusters:
+    # 2 sentences in cluster 0, 4 sentences in cluster 1 and 1 sentence in cluster 2
+    firstVacancyNumberOfSentencesInEachClusterDictionary = {0: 2, 1: 4, 2: 1}
+
+    # second vacancy has 7 sentences in 3 different clusters:
+    # 1 sentence in cluster 0, 3 sentences in cluster 1 and 2 sentences in cluster 2
+    secondVacancyNumberOfSentencesInEachClusterDictionary = {0: 1, 1: 3, 2: 2}
+
+    # from manual calculation we know the Jaccard like score for this should be 5 divided by 8
+    coefficient = calculateJaccardSecondMethod(firstVacancyNumberOfSentencesInEachClusterDictionary, secondVacancyNumberOfSentencesInEachClusterDictionary)
+
+    if coefficient != (float(5)/float(8)):
+        exceptionContent = 'Test that confirms calculation of second Jaccard type coefficient is done right has failed, result is not equal to 5/8 (which is %f) but is %f' % ((float(5)/float(8)), coefficient)
+        raise AssertionError(exceptionContent)
+    else:
+        print 'Successfully confirmed that second Jaccard like similarity is calculated correctly!'
+
+testIfFirstJaccardLikeSimilarityCalculationIsDoneCorrectly()
+testIfSecondJaccardLikeSimilarityCalculationIsDoneCorrectly()
