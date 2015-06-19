@@ -1,15 +1,13 @@
 import logging
-import numpy as np
 import csv
 from gensim import corpora, models, similarities, matutils
 from sklearn.cluster import AgglomerativeClustering
 from math import log
-from nltk.corpus import stopwords
 from sklearn.metrics import silhouette_samples, silhouette_score
 
 import matplotlib.pyplot as plt
 
-#logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 def loadStopWords():
     stopWords = [line.rstrip('\n\r') for line in open('stop-words_dutch.txt')]
@@ -78,8 +76,7 @@ def calculateNumberOfIdealClusters(maxAmount, corpus):
 		cluster_labels = cluster.fit_predict(corpus)
 
 		# The silhouette_score gives the average value for all the samples.
-		# This gives a perspective into the density and separation of the formed
-		# clusters
+		# This gives a perspective into the density and separation of the formed clusters
 		silhouette_avg = silhouette_score(corpus, cluster_labels)
 
 		print "For n_clusters = %d, the average silhouette_score is: %.5f" % (n_clusters, silhouette_avg)
