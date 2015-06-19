@@ -24,8 +24,8 @@ def openInputDataFileAndReturnSentencesRows(fileName='input/data.csv'):
     jobs = []
     jobIds = []
     index = 0
-    previousJobId = 0
     for line in csv_f:
+        # skip column header
 		if line[1] != "sentence" or line[0] != "job_id":
 			jobIds.append(line[0])
 			jobs.append(line[1])
@@ -58,10 +58,10 @@ def calculateNumberOfIdealClusters(maxAmount, corpus):
     silhouette_high_n_clusters = 2;
 
     for n_clusters in range_n_clusters:
-        # Initialize the clusterer with n_clusters value and a random generator
-        # seed of 10 for reproducibility.
+        # Initialize the clusterer with n_clusters value
         cluster = AgglomerativeClustering(n_clusters=n_clusters, linkage="ward", affinity="euclidean")
         cluster_labels = cluster.fit_predict(corpus)
+
         # The silhouette_score gives the average value for all the samples.
         # This gives a perspective into the density and separation of the formed
         # clusters
