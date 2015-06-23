@@ -1,11 +1,10 @@
 import logging
 import csv
+import urllib
 from gensim import corpora, models, similarities, matutils
 from sklearn.cluster import AgglomerativeClustering
 from math import log
 from sklearn.metrics import silhouette_samples, silhouette_score
-
-import matplotlib.pyplot as plt
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -61,7 +60,13 @@ def writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients, fileNa
         writer.writerow(["Job_Id_First", "Job_Id_Second", "Jaccard_Similarity_First_Method_Score", "Jaccard_Similarity_Second_Method_Score", "Jaccard_Similarity_Difference", "Job_Title_First", "Job_Title_Second"])
 
         for job in jobCombinationAndCoefficients:
-            writer.writerow([job["job_id_first"], job["job_id_second"], job["jaccard_similarity_first_method_score"], job["jaccard_similarity_second_method_score"], job["jaccard_similarity_difference"], job["job_title_first"], job["job_title_second"]])
+            # provide a link to the LabelTinder website which shows all skill sentences for both jobs
+            siteUrl = "https://labeltinder.herokuapp.com/compareJobOffersForCategory.php"
+            parameters = "?cat=%d&jobIdF=%s&jobIdS=%s&titleSJob=%s&titleFJob=%s" % (1, urllib.quote_plus(job["job_id_first"]),  urllib.quote_plus(job["job_id_second"]), urllib.quote_plus(job["job_title_first"]), urllib.quote_plus(job["job_title_second"]))
+            hyperlinkFunctionFirstJob = '=HYPERLINK("%s%s"; "%s")' % (siteUrl, parameters, job["job_id_first"])
+            hyperlinkFunctionSecondJob = '=HYPERLINK("%s%s"; "%s")' % (siteUrl, parameters, job["job_id_second"])
+            
+            writer.writerow([hyperlinkFunctionFirstJob, hyperlinkFunctionSecondJob, job["jaccard_similarity_first_method_score"], job["jaccard_similarity_second_method_score"], job["jaccard_similarity_difference"], job["job_title_first"], job["job_title_second"]])
 
 def calculateNumberOfIdealClusters(maxAmount, corpus):
 	print "Initializing silhouette analysis"
@@ -163,7 +168,7 @@ def calculateJaccardScoresForEachJobCombo(allJobIds, clustersForEachjobSentence,
 
             print "First job with title %s (key = cluster identier, value = amount of sentences in cluster): %s" % (jobTitleFirst, currentJobDict)
             print "Second job with title %s (key = cluster identier, value = amount of sentences in cluster): %s" % (jobTitleSecond, otherJobDict)
-            print "Job with ids %s and %s are (first method) %.3f similar and (second method) %.3f similar" % (jobId, eachOtherJobId, coefficientFirstJaccardLikeMethod, coefficientSecondJaccardLikeMethod)
+            print "Job with identifiers %s and %s are (first method) %.3f similar and (second method) %.3f similar" % (jobId, eachOtherJobId, coefficientFirstJaccardLikeMethod, coefficientSecondJaccardLikeMethod)
 
             if (coefficientDifference >= float(0.500)):
                 print "Difference between both Jaccard scores is %.3f, more than 0.500 threshold" %  coefficientDifference
@@ -185,7 +190,7 @@ def testIfFirstJaccardLikeSimilarityCalculationIsDoneCorrectly():
     # 1 sentence in cluster 0, 3 sentences in cluster 1 and 2 sentences in cluster 2
     secondVacancyNumberOfSentencesInEachClusterDictionary = {0: 1, 1: 3, 2: 2}
 
-    # from manual calculation we know the Jaccard like score for this should be 5 divided by 8
+    # from manual calculation we know the Jaccard like score for this should be 3 divided by 3
     coefficient = calculateJaccardFirstMethod(firstVacancyNumberOfSentencesInEachClusterDictionary.values(), secondVacancyNumberOfSentencesInEachClusterDictionary.values())
 
     if coefficient != (float(3)/float(3)):
@@ -229,8 +234,7 @@ stopWords = loadStopWords()
 bigramAsDictionary = corpora.Dictionary(bigram[[line.split() for line in sentenceList]])
 
 # convert stopwords to id
-stopWordIds = [bigramAsDictionary.token2id[stopword] for stopword in stopWords
-          if stopword in bigramAsDictionary.token2id]
+stopWordIds = [bigramAsDictionary.token2id[stopword] for stopword in stopWords if stopword in bigramAsDictionary.token2id]
 
 # remove stopwords
 bigramAsDictionary.filter_tokens(stopWordIds)
