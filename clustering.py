@@ -1,6 +1,7 @@
 import logging
 import csv
 import urllib
+import json
 from gensim import corpora, models, similarities, matutils
 from sklearn.cluster import AgglomerativeClustering
 from math import log
@@ -30,7 +31,7 @@ def openInputDataFileAndReturnSentencesRows(fileName='input/data.csv'):
 
     return (jobs, jobIds)
 
-def openInputDataFileContainingJobTitlesForJobIdsAndReturnDictionary(fileName='input/jobTitlesForJobIds.csv'):
+def openInputDataFileContainingJobTitlesOfJobIdsAndReturnDictionary(fileName='input/jobTitlesForJobIds.csv'):
     file = open(fileName)
     csvFileReader = csv.reader(file)
 
@@ -43,30 +44,53 @@ def openInputDataFileContainingJobTitlesForJobIdsAndReturnDictionary(fileName='i
 
     return dictionaryContainingJobTitleForJobIdKey
 
-def writeClustersForEachJobIdToOutputFile(clusterLabels, allJobIds, sentenceList, fileName="output/outputClusterForJobId.csv"):
+def writeClustersForEachJobIdToOutputFileAndReturnClusterNumbersOfAllSentencesForEachJobOffer(clusterLabels, allJobIds, sentenceList, fileName="output/outputClusterForJobId.csv"):
     with open(fileName, "w") as file:
         writer = csv.writer(file, delimiter=",")
         writer.writerow(["JobId", "Cluster", "Sentence"])
 
-        count = 0
+        indexInClusterLabelsList = 0
+        positionOfSentenceInJobIdDictionary = 0
+        clustersForSentencesInEachJobId = {}
+        lastJobId = None
         for sentence in sentenceList:
-            clusterNumber = clusterLabels[count]
-            writer.writerow([jobIds[count], clusterNumber, sentence])
-            count += 1
+            currentJobId = allJobIds[indexInClusterLabelsList]
+            clusterNumberOfSentence = clusterLabels[indexInClusterLabelsList]
 
-def writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients, fileName="output/outputInfoForJobIdCombo.csv"):
+            # new vacancy encountered, reset position
+            if lastJobId != currentJobId:
+                positionOfSentenceInJobIdDictionary = 0
+                clustersForSentencesInEachJobId[currentJobId] = {}
+
+            clustersForSentencesInEachJobId[currentJobId][positionOfSentenceInJobIdDictionary] = clusterNumberOfSentence
+            indexInClusterLabelsList += 1
+            positionOfSentenceInJobIdDictionary += 1
+            lastJobId = currentJobId
+
+            # for reference also write to file
+            writer.writerow([currentJobId, clusterNumberOfSentence, sentence])
+
+        print clustersForSentencesInEachJobId
+        return clustersForSentencesInEachJobId
+
+def writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients, clusterNumbersForEachSentenceOfAllJobOffers, fileName="output/outputInfoForJobIdCombo.csv"):
     with open(fileName, "w+") as file:
         writer = csv.writer(file, delimiter=",")
-        writer.writerow(["Job_Id_First", "Job_Id_Second", "Jaccard_Similarity_First_Method_Score", "Jaccard_Similarity_Second_Method_Score", "Jaccard_Similarity_Difference", "Job_Title_First", "Job_Title_Second"])
+        writer.writerow(["Job_Id_First", "Job_Id_Second", "Jaccard_Similarity_First_Method_Score", "Jaccard_Similarity_Second_Method_Score", "Jaccard_Similarity_Difference", "Job_Title_First", "Job_Title_Second", "Overview_Page"])
 
         for job in jobCombinationAndCoefficients:
+            jobIdFirst = job["job_id_first"]
+            jobIdSecond = job["job_id_second"]
+
+            clusterNumbersAsJsonDataForFirstJobIdSentences = urllib.quote_plus(json.dumps(clusterNumbersForEachSentenceOfAllJobOffers[jobIdFirst].values()))
+            clusterNumbersAsJsonDataForSecondJobIdSentences = urllib.quote_plus(json.dumps(clusterNumbersForEachSentenceOfAllJobOffers[jobIdSecond].values()))
+       
             # provide a link to the LabelTinder website which shows all skill sentences for both jobs
             siteUrl = "https://labeltinder.herokuapp.com/compareJobOffersForCategory.php"
-            parameters = "?cat=%d&jobIdF=%s&jobIdS=%s&titleSJob=%s&titleFJob=%s" % (1, urllib.quote_plus(job["job_id_first"]),  urllib.quote_plus(job["job_id_second"]), urllib.quote_plus(job["job_title_first"]), urllib.quote_plus(job["job_title_second"]))
-            hyperlinkFunctionFirstJob = '=HYPERLINK("%s%s"; "%s")' % (siteUrl, parameters, job["job_id_first"])
-            hyperlinkFunctionSecondJob = '=HYPERLINK("%s%s"; "%s")' % (siteUrl, parameters, job["job_id_second"])
+            parameters = "?cat=%d&jobIdF=%s&jobIdS=%s&titleSJob=%s&titleFJob=%s&clustersFJob=%s&clustersSJob=%s" % (1, urllib.quote_plus(jobIdFirst), urllib.quote_plus(jobIdSecond), urllib.quote_plus(job["job_title_first"]), urllib.quote_plus(job["job_title_second"]), clusterNumbersAsJsonDataForFirstJobIdSentences, clusterNumbersAsJsonDataForSecondJobIdSentences)
+            hyperlinkToLabelTinderPageWithOverview = '%s%s' % (siteUrl, parameters)
             
-            writer.writerow([hyperlinkFunctionFirstJob, hyperlinkFunctionSecondJob, job["jaccard_similarity_first_method_score"], job["jaccard_similarity_second_method_score"], job["jaccard_similarity_difference"], job["job_title_first"], job["job_title_second"]])
+            writer.writerow([jobIdFirst, jobIdSecond, job["jaccard_similarity_first_method_score"], job["jaccard_similarity_second_method_score"], job["jaccard_similarity_difference"], job["job_title_first"], job["job_title_second"], hyperlinkToLabelTinderPageWithOverview])
 
 def calculateNumberOfIdealClusters(maxAmount, corpus):
 	print "Initializing silhouette analysis"
@@ -222,7 +246,7 @@ testIfSecondJaccardLikeSimilarityCalculationIsDoneCorrectly()
 
 sentenceList, jobIds = openInputDataFileAndReturnSentencesRows()
 
-jobTitlesForJobIds = openInputDataFileContainingJobTitlesForJobIdsAndReturnDictionary()
+jobTitlesForJobIds = openInputDataFileContainingJobTitlesOfJobIdsAndReturnDictionary()
 
 # Automatically detect common phrases, bigram words are underscored in between them (frequently co-occurring tokens)
 bigram = models.Phrases([line.lower().split() for line in sentenceList])
@@ -264,5 +288,5 @@ clustersForEachjobSentence = calculateAmountOfClustersForEachJobId(clusterLabels
 
 jobCombinationAndCoefficients = calculateJaccardScoresForEachJobCombo(jobIds, clustersForEachjobSentence, clusterLabels, jobTitlesForJobIds)
 
-writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients)
-writeClustersForEachJobIdToOutputFile(clusterLabels, jobIds, sentenceList)
+clusterNumbersForEachSentenceOfAllJobOffers = writeClustersForEachJobIdToOutputFileAndReturnClusterNumbersOfAllSentencesForEachJobOffer(clusterLabels, jobIds, sentenceList)
+writeInfoForEachJobIdComboToOutputFile(jobCombinationAndCoefficients, clusterNumbersForEachSentenceOfAllJobOffers)
